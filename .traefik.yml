@@ -4,7 +4,9 @@ import: github.com/x9gg/traefik-middleware
 summary: Adds a KSUID-based trace ID header to requests and optionally to responses
 basePkg: x9gg_traefik_middleware
 testData:
-  valuePrefix: ""
-  valueSuffix: ""
-  headerName: "X-Server-Request-Trace-Id"
-  addToResponse: true
+  trace: 
+    enabled: true
+    valuePrefix: ""
+    valueSuffix: ""
+    headerName: "X-Request-Trace-Id"
+    addToResponse: true

@@ -8,31 +8,40 @@ import (
 	"github.com/segmentio/ksuid"
 )
 
-const defaultHeaderName = "X-Trace-Id"
+const defaultTraceHeaderName = "X-Request-Trace-Id"
 
-type Config struct {
+type TraceConfig struct {
+	Enabled       bool   `json:"enabled"`
 	ValuePrefix   string `json:"valuePrefix"`
 	ValueSuffix   string `json:"valueSuffix"`
 	HeaderName    string `json:"headerName"`
 	AddToResponse bool   `json:"addToResponse"`
 }
 
-func CreateConfig() *Config {
-	return &Config{
-		ValuePrefix:   "",
-		ValueSuffix:   "",
-		HeaderName:    defaultHeaderName,
-		AddToResponse: true,
-	}
+type Config struct {
+	Trace TraceConfig `json:"trace"`
 }
 
 type X9GGTraefikMiddleware struct {
-	valuePrefix   string
-	valueSuffix   string
-	headerName    string
-	addToResponse bool
-	name          string
-	next          http.Handler
+	traceEnabled       bool
+	traceValuePrefix   string
+	traceValueSuffix   string
+	traceHeaderName    string
+	traceAddToResponse bool
+
+	next http.Handler
+}
+
+func CreateConfig() *Config {
+	return &Config{
+		Trace: TraceConfig{
+			Enabled:       true,
+			ValuePrefix:   "",
+			ValueSuffix:   "",
+			HeaderName:    defaultTraceHeaderName,
+			AddToResponse: true,
+		},
+	}
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
@@ -41,41 +50,44 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 	}
 
 	middleware := &X9GGTraefikMiddleware{
-		valuePrefix:   config.ValuePrefix,
-		valueSuffix:   config.ValueSuffix,
-		headerName:    config.HeaderName,
-		addToResponse: config.AddToResponse,
-		next:          next,
-		name:          name,
+		traceEnabled:       config.Trace.Enabled,
+		traceValuePrefix:   config.Trace.ValuePrefix,
+		traceValueSuffix:   config.Trace.ValueSuffix,
+		traceHeaderName:    config.Trace.HeaderName,
+		traceAddToResponse: config.Trace.AddToResponse,
+
+		next: next,
 	}
 
-	if middleware.headerName == "" {
-		middleware.headerName = defaultHeaderName
+	if middleware.traceHeaderName == "" {
+		middleware.traceHeaderName = defaultTraceHeaderName
 	}
 
-	if middleware.valuePrefix == "\"\"" {
-		middleware.valuePrefix = ""
+	if middleware.traceValuePrefix == "\"\"" {
+		middleware.traceValuePrefix = ""
 	}
 
-	if middleware.valueSuffix == "\"\"" {
-		middleware.valueSuffix = ""
+	if middleware.traceValueSuffix == "\"\"" {
+		middleware.traceValueSuffix = ""
 	}
 
 	return middleware, nil
 }
 
-func (t *X9GGTraefikMiddleware) GenerateTraceId() string {
+func (m *X9GGTraefikMiddleware) GenerateTraceId() string {
 	id := ksuid.New()
-	return t.valuePrefix + id.String() + t.valueSuffix
+	return m.traceValuePrefix + id.String() + m.traceValueSuffix
 }
 
-func (t *X9GGTraefikMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	traceValue := t.GenerateTraceId()
-	req.Header.Set(t.headerName, traceValue)
+func (m *X9GGTraefikMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	if m.traceEnabled {
+		traceValue := m.GenerateTraceId()
+		req.Header.Set(m.traceHeaderName, traceValue)
 
-	if t.addToResponse {
-		rw.Header().Set(t.headerName, traceValue)
+		if m.traceAddToResponse {
+			rw.Header().Set(m.traceHeaderName, traceValue)
+		}
 	}
 
-	t.next.ServeHTTP(rw, req)
+	m.next.ServeHTTP(rw, req)
 }
