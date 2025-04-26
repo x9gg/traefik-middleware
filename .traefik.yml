@@ -1,4 +1,5 @@
-displayName: X9GG Traefik Middlewaretype: middleware
+displayName: X9GG Traefik Middleware
+type: middleware
 import: github.com/x9gg/traefik-middleware
 summary: Adds a KSUID-based trace ID header to requests and optionally to responses
 basePkg: x9gg_traefik_middleware
