@@ -36,6 +36,9 @@ http:
             enabled: true
             removeKeyNameOnSuccess: false
             removeKeyValueOnSuccess: true
+            terminateOnFailure: true
+            errorResponseType: plain
+            errorMessage: "oh oh"
             keys:
               - name: "service-a" 
                 value: "api-key-123"
