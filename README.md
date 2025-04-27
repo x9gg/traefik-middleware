@@ -28,7 +28,7 @@ http:
   middlewares:
     x9gg-traefik-middleware:
       plugin:
-        gateway-shield:
+        x9gg-traefik-middleware:
           trace:
             enabled: true
             headerName: "X-Request-Trace-Id"
