@@ -36,7 +36,6 @@ http:
             enabled: true
             removeKeyNameOnSuccess: false
             removeKeyValueOnSuccess: true
-            terminateOnFailure: true
             errorResponseType: plain
             errorMessage: "oh oh"
             keys:

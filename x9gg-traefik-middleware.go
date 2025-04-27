@@ -32,7 +32,6 @@ type AuthConfig struct {
 	KeyValueHeaderName      string       `json:"keyValueHeaderName"`
 	RemoveKeyNameOnSuccess  bool         `json:"removeKeyNameOnSuccess"`
 	RemoveKeyValueOnSuccess bool         `json:"removeKeyValueOnSuccess"`
-	TerminateOnFailure      bool         `json:"terminateOnFailure"`
 	ErrorResponseType       string       `json:"errorResponseType"`
 	ErrorMessage            string       `json:"errorMessage"`
 	Keys                    []ServiceKey `json:"keys,omitempty"`
@@ -62,7 +61,6 @@ type X9GGTraefikMiddleware struct {
 	authKeyValueHeaderName      string
 	authRemoveKeyNameOnSuccess  bool
 	authRemoveKeyValueOnSuccess bool
-	authTerminateOnFailure      bool
 	authErrorResponseType       string
 	authErrorMessage            string
 
@@ -86,7 +84,6 @@ func CreateConfig() *Config {
 			KeyValueHeaderName:      defaultAuthKeyValueHeaderName,
 			RemoveKeyNameOnSuccess:  false,
 			RemoveKeyValueOnSuccess: true,
-			TerminateOnFailure:      true,
 			ErrorResponseType:       defaultAuthErrorResponseType,
 			ErrorMessage:            defaultAuthErrorMessage,
 			Keys:                    make([]ServiceKey, 0),
@@ -115,7 +112,6 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		authKeyValueHeaderName:      config.Auth.KeyValueHeaderName,
 		authRemoveKeyNameOnSuccess:  config.Auth.RemoveKeyNameOnSuccess,
 		authRemoveKeyValueOnSuccess: config.Auth.RemoveKeyValueOnSuccess,
-		authTerminateOnFailure:      config.Auth.TerminateOnFailure,
 		authErrorResponseType:       config.Auth.ErrorResponseType,
 		authErrorMessage:            config.Auth.ErrorMessage,
 		keys:                        make(map[string]string),
@@ -205,27 +201,21 @@ func (m *X9GGTraefikMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 		authenticated := m.isKeyPairValid(keyName, keyValue)
 
 		if !authenticated {
-			req.Header.Set("X-Auth-Failed", "true")
-			req.Header.Set("X-Auth-Failed-Reason", "Invalid service key")
 			rw.WriteHeader(http.StatusUnauthorized)
 
-			if m.authTerminateOnFailure {
-				// Set appropriate content type based on configuration
-				switch m.authErrorResponseType {
-				case "html":
-					rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-					fmt.Fprintf(rw, "<!DOCTYPE html><html><body><h1>%s</h1></body></html>", m.authErrorMessage)
-				case "json":
-					rw.Header().Set("Content-Type", "application/json; charset=utf-8")
-					fmt.Fprintf(rw, "{\"error\": \"%s\", \"status\": 401, \"keyName\": \"%s\"}",
-						m.authErrorMessage, m.authKeyNameHeaderName)
-				default: // plain
-					rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
-					fmt.Fprint(rw, m.authErrorMessage)
-				}
-				return
+			switch m.authErrorResponseType {
+			case "html":
+				rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+				fmt.Fprintf(rw, "<!DOCTYPE html><html><body><h1>%s</h1></body></html>", m.authErrorMessage)
+			case "json":
+				rw.Header().Set("Content-Type", "application/json; charset=utf-8")
+				fmt.Fprintf(rw, "{\"error\": \"%s\", \"status\": 401, \"keyName\": \"%s\"}",
+					m.authErrorMessage, m.authKeyNameHeaderName)
+			default: // plain
+				rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				fmt.Fprint(rw, m.authErrorMessage)
 			}
-
+			return
 		}
 
 		if m.authRemoveKeyNameOnSuccess {
