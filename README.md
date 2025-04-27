@@ -48,6 +48,9 @@ http:
 - **IP Access Control** - Allow or deny requests based on IP address/range
 - Custom response error
 
+## Todos
+- add tests
+
 ## License
 
 [MIT License](LICENSE)

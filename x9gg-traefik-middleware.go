@@ -4,14 +4,19 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/segmentio/ksuid"
 )
 
 const defaultTraceHeaderName = "X-Request-Trace-Id"
 
-const defaultAuthServiceKeyNameHeaderName = "X-Service-Key-name"
-const defaultAuthServiceKeyValueHeaderName = "X-Service-Key-Value"
+const defaultAuthKeyNameHeaderName = "X-Service-Key-name"
+const defaultAuthKeyValueHeaderName = "X-Service-Key-Value"
+const defaultAuthErrorResponseType = "plain"
+const defaultAuthErrorMessage = "unauthorized"
+
+var allowedResponseTypes = []string{"plain", "html", "json"}
 
 type TraceConfig struct {
 	Enabled       bool   `json:"enabled"`
@@ -27,6 +32,9 @@ type AuthConfig struct {
 	KeyValueHeaderName      string       `json:"keyValueHeaderName"`
 	RemoveKeyNameOnSuccess  bool         `json:"removeKeyNameOnSuccess"`
 	RemoveKeyValueOnSuccess bool         `json:"removeKeyValueOnSuccess"`
+	TerminateOnFailure      bool         `json:"terminateOnFailure"`
+	ErrorResponseType       string       `json:"errorResponseType"`
+	ErrorMessage            string       `json:"errorMessage"`
 	Keys                    []ServiceKey `json:"keys,omitempty"`
 }
 
@@ -49,12 +57,16 @@ type X9GGTraefikMiddleware struct {
 	traceAddToResponse bool
 
 	// auth properties
-	authEnabled             bool
-	authKeyNameHeaderName   string
-	authKeyValueHeaderName  string
-	removeKeyNameOnSuccess  bool
-	removeKeyValueOnSuccess bool
-	keys                    map[string]string
+	authEnabled                 bool
+	authKeyNameHeaderName       string
+	authKeyValueHeaderName      string
+	authRemoveKeyNameOnSuccess  bool
+	authRemoveKeyValueOnSuccess bool
+	authTerminateOnFailure      bool
+	authErrorResponseType       string
+	authErrorMessage            string
+
+	keys map[string]string
 
 	next http.Handler
 }
@@ -70,10 +82,13 @@ func CreateConfig() *Config {
 		},
 		Auth: AuthConfig{
 			Enabled:                 false,
-			KeyNameHeaderName:       defaultAuthServiceKeyNameHeaderName,
-			KeyValueHeaderName:      defaultAuthServiceKeyValueHeaderName,
+			KeyNameHeaderName:       defaultAuthKeyNameHeaderName,
+			KeyValueHeaderName:      defaultAuthKeyValueHeaderName,
 			RemoveKeyNameOnSuccess:  false,
 			RemoveKeyValueOnSuccess: true,
+			TerminateOnFailure:      true,
+			ErrorResponseType:       defaultAuthErrorResponseType,
+			ErrorMessage:            defaultAuthErrorMessage,
 			Keys:                    make([]ServiceKey, 0),
 		},
 	}
@@ -95,12 +110,15 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		traceHeaderName:    config.Trace.HeaderName,
 		traceAddToResponse: config.Trace.AddToResponse,
 
-		authEnabled:             config.Auth.Enabled,
-		authKeyNameHeaderName:   config.Auth.KeyNameHeaderName,
-		authKeyValueHeaderName:  config.Auth.KeyValueHeaderName,
-		removeKeyNameOnSuccess:  config.Auth.RemoveKeyNameOnSuccess,
-		removeKeyValueOnSuccess: config.Auth.RemoveKeyValueOnSuccess,
-		keys:                    make(map[string]string),
+		authEnabled:                 config.Auth.Enabled,
+		authKeyNameHeaderName:       config.Auth.KeyNameHeaderName,
+		authKeyValueHeaderName:      config.Auth.KeyValueHeaderName,
+		authRemoveKeyNameOnSuccess:  config.Auth.RemoveKeyNameOnSuccess,
+		authRemoveKeyValueOnSuccess: config.Auth.RemoveKeyValueOnSuccess,
+		authTerminateOnFailure:      config.Auth.TerminateOnFailure,
+		authErrorResponseType:       config.Auth.ErrorResponseType,
+		authErrorMessage:            config.Auth.ErrorMessage,
+		keys:                        make(map[string]string),
 
 		next: next,
 	}
@@ -122,11 +140,11 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 
 	if middleware.authEnabled {
 		if middleware.authKeyNameHeaderName == "" {
-			middleware.authKeyNameHeaderName = defaultAuthServiceKeyNameHeaderName
+			middleware.authKeyNameHeaderName = defaultAuthKeyNameHeaderName
 		}
 
 		if middleware.authKeyValueHeaderName == "" {
-			middleware.authKeyValueHeaderName = defaultAuthServiceKeyValueHeaderName
+			middleware.authKeyValueHeaderName = defaultAuthKeyValueHeaderName
 		}
 
 		for _, key := range config.Auth.Keys {
@@ -134,6 +152,14 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 				return nil, fmt.Errorf("key name and value cannot be empty")
 			}
 			middleware.keys[key.Name] = key.Value
+		}
+
+		if !slices.Contains(allowedResponseTypes, middleware.authErrorResponseType) {
+			middleware.authErrorResponseType = "plain"
+		}
+
+		if middleware.authErrorMessage == "" {
+			middleware.authErrorMessage = defaultAuthErrorMessage
 		}
 
 	}
@@ -179,18 +205,34 @@ func (m *X9GGTraefikMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 		authenticated := m.isKeyPairValid(keyName, keyValue)
 
 		if !authenticated {
-			rw.Header().Set("Content-Type", "application/plain; charset=utf-8")
+			req.Header.Set("X-Auth-Failed", "true")
+			req.Header.Set("X-Auth-Failed-Reason", "Invalid service key")
 			rw.WriteHeader(http.StatusUnauthorized)
 
-			// TODO: custom error response
-			return
+			if m.authTerminateOnFailure {
+				// Set appropriate content type based on configuration
+				switch m.authErrorResponseType {
+				case "html":
+					rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+					fmt.Fprintf(rw, "<!DOCTYPE html><html><body><h1>%s</h1></body></html>", m.authErrorMessage)
+				case "json":
+					rw.Header().Set("Content-Type", "application/json; charset=utf-8")
+					fmt.Fprintf(rw, "{\"error\": \"%s\", \"status\": 401, \"keyName\": \"%s\"}",
+						m.authErrorMessage, m.authKeyNameHeaderName)
+				default: // plain
+					rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+					fmt.Fprint(rw, m.authErrorMessage)
+				}
+				return
+			}
+
 		}
 
-		if m.removeKeyNameOnSuccess {
+		if m.authRemoveKeyNameOnSuccess {
 			req.Header.Del(m.authKeyNameHeaderName)
 		}
 
-		if m.removeKeyValueOnSuccess {
+		if m.authRemoveKeyValueOnSuccess {
 			req.Header.Del(m.authKeyValueHeaderName)
 		}
 	}
