@@ -10,3 +10,14 @@ testData:
     valueSuffix: ""
     headerName: "X-Request-Trace-Id"
     addToResponse: true
+  auth:
+    enabled: true
+    keyNameHeaderName: "X-Service-Key-name"
+    keyValueHeaderName: "X-Service-Key-value"
+    removeKeyNameOnSuccess: false
+    removeKeyValueOnSuccess: true
+    keys:
+      - name: "service-a"
+        value: "api-key-123"
+      - name: "service-b"
+        value: "api-key-456"
