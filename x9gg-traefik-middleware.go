@@ -206,7 +206,7 @@ func (m *X9GGTraefikMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 			switch m.authErrorResponseType {
 			case "html":
 				rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-				fmt.Fprintf(rw, "<!DOCTYPE html><html><body><h1>%s</h1></body></html>", m.authErrorMessage)
+				fmt.Fprintf(rw, "%s", m.authErrorMessage)
 			case "json":
 				rw.Header().Set("Content-Type", "application/json; charset=utf-8")
 				fmt.Fprintf(rw, "{\"error\": \"%s\", \"status\": 401, \"keyName\": \"%s\"}",
