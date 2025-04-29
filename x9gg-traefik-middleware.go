@@ -11,7 +11,7 @@ import (
 
 const defaultTraceHeaderName = "X-Request-Trace-Id"
 
-const defaultAuthKeyNameHeaderName = "X-Service-Key-name"
+const defaultAuthKeyNameHeaderName = "X-Service-Key-Name"
 const defaultAuthKeyValueHeaderName = "X-Service-Key-Value"
 const defaultAuthErrorResponseType = "plain"
 const defaultAuthErrorMessage = "unauthorized"
@@ -218,12 +218,12 @@ func (m *X9GGTraefikMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 			return
 		}
 
-		if m.authRemoveKeyNameOnSuccess {
-			req.Header.Del(m.authKeyNameHeaderName)
+		if !m.authRemoveKeyNameOnSuccess {
+			rw.Header().Set(m.authKeyNameHeaderName, keyName)
 		}
 
-		if m.authRemoveKeyValueOnSuccess {
-			req.Header.Del(m.authKeyValueHeaderName)
+		if !m.authRemoveKeyValueOnSuccess {
+			rw.Header().Set(m.authKeyValueHeaderName, keyValue)
 		}
 	}
 
